@@ -390,8 +390,8 @@ def launch_gui(self):
             if guiRoot is None: guiRoot = Tkinter.Tk()
 
             __import__(self.invocation.options.gui)
-            sys.modules[self.invocation.options.gui].__init__(self, guiRoot,
-                    poll, skin=self.invocation.options.skin)
+            sys.modules[self.invocation.options.gui].__init__(self, poll,
+                skin=self.invocation.options.skin, root=guiRoot)
 
             # import plugin system
             import pymol.plugins
@@ -454,8 +454,6 @@ def launch(args=None, block_input_hook=0):
     else:
         while True:
             time.sleep(10)
-    # _cmd.runpymol(_cmd._get_global_C_object(), block_input_hook)
-
 
 def finish_launching(args=None):
     '''

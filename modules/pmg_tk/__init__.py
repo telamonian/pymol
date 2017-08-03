@@ -22,63 +22,20 @@
 from .PMGApp import *
 import sys, os, threading
 import traceback
-import time
 
-import Tkinter
-
-# def testwindow():
-#     w1=Tkinter.Tk()
-#     w1.title("Finestra 1")
-#     # Width, height in pixels
-#     f1=Tkinter.Frame(w1, height=50, width=50)
-#     f1.pack()
-#     w1.mainloop()
-
-class MyTkApp(threading.Thread):
-    def __init__(self, root=None):
-        self.root = root
-        threading.Thread.__init__(self)
-
-    def run(self):
-        if self.root is None: self.root = Tkinter.Tk(mtDebug=9)
-
-        keep_alive = 1
-        while keep_alive:
-            self.root.update()
-            time.sleep(0.05)
-
-def run(pymol_instance,root,poll=0,skin=None):
+def run(pymol_instance,poll=0,skin=None,root=None):
     try:
         if not hasattr(sys,"argv"):
             sys.argv=["pymol"]
-
-        # import ipdb; ipdb.set_trace()
-        # testwindow()
-        # # root = Tkinter.Tk(); root.mainloop()
-        # import ipdb; ipdb.set_trace()
-        # pass
-        PMGApp(pymol_instance,root,skin).run(poll)
+        PMGApp(pymol_instance,skin,root).run(poll)
     except:
         traceback.print_exc()
         
-def __init__(pymol_instance,root,poll=0,skin=None):
-    # import ipdb; ipdb.set_trace()
-
-    # root = Tkinter.Tk(mtDebug=9)
-
-    # run(root, pymol_instance=pymol_instance, poll=poll, skin=skin)
-
-    # t0 = MyTkApp()
-    # t0.start()
-    # root = t0.root
-    # print root
-
-    t1 = threading.Thread(target=run,args=(pymol_instance,root,poll,skin))
+def __init__(pymol_instance,poll=0,skin=None,root=None):
+    t1 = threading.Thread(target=run,args=(pymol_instance,poll,skin,root))
     t1.setDaemon(1)
     t1.start()
-    #
-    # # time.sleep(5)
-    # root.mainloop()
+
 
 
 
