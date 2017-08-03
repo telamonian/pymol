@@ -295,7 +295,7 @@ class PMGApp(Pmw.MegaWidget):
         if self.skin != None:
             self.skin.setup()
     
-    def __init__(self, pymol_instance, skin):
+    def __init__(self, pymol_instance, skin, root=None):
 
         # prevent overloading
         self.initializePlugins = self._initializePlugins
@@ -320,9 +320,8 @@ class PMGApp(Pmw.MegaWidget):
 
             self.skin = None
             
-            # initialize Tcl/Tk
-
-            self.root = Tk() # creates the root window for the application
+            # initialize Tcl/Tk if an instance has not been passed in
+            self.root = root if root is not None else Tk() # the root window for the application
 
             # color scheme
 

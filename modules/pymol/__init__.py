@@ -361,12 +361,13 @@ def adapt_to_hardware(self):
     # store our adapted state as default
     cmd.reinitialize("store")
 
-def launch_gui(self):
+def _launch_gui(self):
     '''
     Launch if requested:
     - external GUI
     - RPC server
     '''
+    global guiRoot
     pymol_path = os.getenv('PYMOL_PATH', '')
 
     try:
@@ -379,7 +380,7 @@ def launch_gui(self):
         if self.invocation.options.external_gui in (1, 3):
             __import__(self.invocation.options.gui)
             sys.modules[self.invocation.options.gui].__init__(self, poll,
-                    skin = self.invocation.options.skin)
+                skin=self.invocation.options.skin, root=guiRoot)
 
             # import plugin system
             import pymol.plugins
@@ -391,6 +392,78 @@ def launch_gui(self):
     # --
     except:
         traceback.print_exc()
+
+def launch_gui(self=None):
+    '''
+    Launch if requested:
+    - external GUI
+    - RPC server
+    '''
+    global guiRoot
+    global guiPymolInstance
+    initGuiRoot()
+
+    # import ipdb; ipdb.set_trace()
+
+    if guiRoot:
+        if guiPymolInstance is None:
+            # do nothing for now, but save the pymol instance for later
+            guiPymolInstance = self
+        else:
+            _launch_gui(guiPymolInstance)
+    else:
+        _launch_gui(self)
+
+    # pymol_path = os.getenv('PYMOL_PATH', '')
+    #
+    # try:
+    #     poll = (sys.platform == 'darwin')
+    #
+    #     if self.invocation.options.external_gui == 3:
+    #         if 'DISPLAY' not in os.environ:
+    #             os.environ['DISPLAY'] = ':0.0'
+    #
+    #     if self.invocation.options.external_gui in (1, 3):
+    #         __import__(self.invocation.options.gui)
+    #         guiInitialized = False
+    #
+    #         if guiRoot:
+    #             # special handling for external GUI on OS X if using Tk/Aqua
+    #         else:
+    #             sys.modules[self.invocation.options.gui].__init__(self, poll,
+    #                 skin=self.invocation.options.skin)
+    #
+    #         if sys.platform == 'darwin':
+    #             import Tkinter
+    #             if Tkinter.Tk()._windowingsystem == 'aqua':
+    #                 # from mttkinter import mtTkinter as tk
+    #
+    #                 # initialize guiRoot if needed
+    #                 if guiRoot is None: guiRoot = Tkinter.Tk()
+    #
+    #                 # initialize external gui app without running it
+    #                 app = sys.modules[self.invocation.options.gui].initApp(self,
+    #                     skin=self.invocation.options.skin, root=guiRoot)
+    #
+    #                 # flush queue now, as per the start of the normal app.run() method
+    #                 app.flush_fifo_once()
+    #
+    #                 guiInitialized = True
+    #
+    #         if not guiInitialized:
+    #
+    #             guiInitialized = True
+    #
+    #         # import plugin system
+    #         import pymol.plugins
+    #
+    # # -- Greg Landrum's RPC stuff
+    #     if self.invocation.options.rpcServer:
+    #         from pymol import rpc
+    #         rpc.launch_XMLRPC()
+    # # --
+    # except:
+    #     traceback.print_exc()
 
 def prime_pymol():
     '''
@@ -411,7 +484,27 @@ def prime_pymol():
             # launch X11 (if needed)
             os.system("/usr/bin/open -a X11")
 
-def launch(args=None, block_input_hook=0):
+def initGuiRoot():
+    '''
+    If we need to init Tk at the top level, make sure we only do it once
+    '''
+    global guiRoot
+
+    if guiRoot is not None:
+        # this method has already been run at least once and no further action is needed
+        return
+
+    if invocation.options.external_gui in (1, 3) and sys.platform == 'darwin':
+        import Tkinter
+        root = Tkinter._default_root if Tkinter._default_root is not None else Tkinter.Tk()
+        if root._windowingsystem == 'aqua':
+            guiRoot = root
+        else:
+            guiRoot = False
+    else:
+        guiRoot = False
+
+def _launch(args=None, block_input_hook=0):
     '''
     Run PyMOL with args
 
@@ -422,6 +515,62 @@ def launch(args=None, block_input_hook=0):
     invocation.parse_args(args)
     prime_pymol()
     _cmd.runpymol(_cmd._get_global_C_object(), block_input_hook)
+
+def _launch_threaded(args=None, block_input_hook=0):
+    global guiRoot
+    global guiPymolInstance
+    global glutThreadObject
+
+    # run PyMOL in thread
+    invocation.options.keep_thread_alive = 1
+    cmd.reaper = threading.currentThread()
+    glutThreadObject = threading.Thread(target=_launch,
+        args=(args, block_input_hook))
+    glutThreadObject.start()
+
+    e = threading.Event()
+
+    # wait for the C library to initialize
+    while cmd._COb is None:
+        e.wait(0.01)
+
+    # make sure symmetry module has time to start...
+    while not hasattr(pymol, 'xray'):
+        e.wait(0.01)
+
+    while guiPymolInstance is None:
+        time.sleep(.1)
+    launch_gui()
+
+    # if guiRoot is not None:
+    #     # we need to update the external GUI on the main thread
+    #     while invocation.options.keep_thread_alive:
+    #         guiRoot.update()
+    #         time.sleep(.01)
+
+def launch(args=None, block_input_hook=0):
+    global guiRoot
+    initGuiRoot()
+
+    if guiRoot:
+        _launch_threaded(args=args, block_input_hook=block_input_hook)
+    else:
+        _launch(args=args, block_input_hook=block_input_hook)
+
+    # if sys.platform == 'darwin':
+    #     import Tkinter
+    #     if Tkinter.Tk()._windowingsystem == 'aqua':
+    #         from mttkinter import mtTkinter as tk
+    #
+    #         # if using Tk/Aqua on OS X, running on the main thread is necessary, so initialize guiRoot here
+    #         if guiRoot is None: guiRoot = Tkinter.Tk()
+    #
+    #         # do special launch in which the main gui runs in a subthread and the external gui runs in the main thread
+    #         _launch_threaded(args=args, block_input_hook=block_input_hook)
+    #     else:
+    #         _launch(args=args, block_input_hook=block_input_hook)
+    # else:
+    #     _launch(args=args, block_input_hook=block_input_hook)
 
 def finish_launching(args=None):
     '''
@@ -444,7 +593,7 @@ def finish_launching(args=None):
         # run PyMOL in thread
         invocation.options.keep_thread_alive = 1
         cmd.reaper = threading.currentThread()
-        glutThreadObject = threading.Thread(target=launch,
+        glutThreadObject = threading.Thread(target=_launch,
                 args=(list(args), 1))
         glutThreadObject.start()
 
@@ -513,7 +662,9 @@ class Session_Storage:
 
 ######### VARIABLES ############################
 
+guiRoot = None
 glutThread = 0
+guiPymolInstance = None
 
 ######### ENVIRONMENT ##########################
 
