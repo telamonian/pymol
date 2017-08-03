@@ -28,6 +28,11 @@ from __future__ import print_function
 
 import os
 import sys
+
+# support Tkinter multithreading
+from mttkinter import *
+import Tkinter
+
 import __main__
 
 if __name__ == '__main__':
@@ -370,6 +375,8 @@ def launch_gui(self):
     - external GUI
     - RPC server
     '''
+    global guiRoot
+
     pymol_path = os.getenv('PYMOL_PATH', '')
 
     try:
@@ -380,9 +387,11 @@ def launch_gui(self):
                 os.environ['DISPLAY'] = ':0.0'
 
         if self.invocation.options.external_gui in (1, 3):
+            if guiRoot is None: guiRoot = Tkinter.Tk()
+
             __import__(self.invocation.options.gui)
-            sys.modules[self.invocation.options.gui].__init__(self, poll,
-                    skin = self.invocation.options.skin)
+            sys.modules[self.invocation.options.gui].__init__(self, guiRoot,
+                    poll, skin=self.invocation.options.skin)
 
             # import plugin system
             import pymol.plugins
@@ -414,17 +423,39 @@ def prime_pymol():
             # launch X11 (if needed)
             os.system("/usr/bin/open -a X11")
 
+def _launch(block_input_hook):
+    _cmd.runpymol(_cmd._get_global_C_object(), block_input_hook)
+
 def launch(args=None, block_input_hook=0):
     '''
     Run PyMOL with args
 
     Only returns if we are running pretend GLUT.
     '''
+    global guiRoot
+
     if args is None:
         args = sys.argv
     invocation.parse_args(args)
     prime_pymol()
-    _cmd.runpymol(_cmd._get_global_C_object(), block_input_hook)
+
+    threeDeeWindowThread = threading.Thread(target=_launch, args=(block_input_hook,))
+    threeDeeWindowThread.setDaemon(1)
+    threeDeeWindowThread.start()
+
+    if guiRoot is None: guiRoot = Tkinter.Tk()
+
+    if guiRoot is not None:
+        guiRoot.mainloop()
+        # keep_alive = 1
+        # while keep_alive:
+        #     guiRoot.update()
+        #     time.sleep(0.05)
+    else:
+        while True:
+            time.sleep(10)
+    # _cmd.runpymol(_cmd._get_global_C_object(), block_input_hook)
+
 
 def finish_launching(args=None):
     '''
@@ -531,6 +562,7 @@ def _colortype(cmd):
 
 ######### VARIABLES ############################
 
+guiRoot = None
 glutThread = 0
 
 ######### ENVIRONMENT ##########################

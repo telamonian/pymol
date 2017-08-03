@@ -218,7 +218,7 @@ class PMGApp(Pmw.MegaWidget):
         if poll:
             import time
             while keep_alive:
-                self.root.update()
+                # self.root.update()
                 time.sleep(0.05)
         else:
             self.root.mainloop()
@@ -295,7 +295,7 @@ class PMGApp(Pmw.MegaWidget):
         if self.skin != None:
             self.skin.setup()
     
-    def __init__(self, pymol_instance, skin):
+    def __init__(self, pymol_instance, skin, root=None):
 
         # prevent overloading
         self.initializePlugins = self._initializePlugins
@@ -320,9 +320,8 @@ class PMGApp(Pmw.MegaWidget):
 
             self.skin = None
             
-            # initialize Tcl/Tk
-
-            self.root = Tk() # creates the root window for the application
+            # use the passed in GUI window root or initialize Tcl/Tk
+            self.root = root if root is not None else Tk()
 
             # color scheme
 
