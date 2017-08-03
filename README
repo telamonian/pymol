@@ -1,4 +1,14 @@
 ----------------------------------------------------------------------
+This is a near mirror of the PyMOL open source tree. Several files
+have been patched in order to allow the external GUI to function in
+the OS X native Aqua windowing environment.
+
+If you are looking for the upstream svn repository, please visit:
+
+    https://sourceforge.net/p/pymol/code
+----------------------------------------------------------------------
+
+----------------------------------------------------------------------
 PyMOL is Copyright (c) Schrodinger, LLC
 http://www.pymol.org
 ----------------------------------------------------------------------
