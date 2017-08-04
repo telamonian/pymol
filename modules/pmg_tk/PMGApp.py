@@ -216,16 +216,12 @@ class PMGApp(Pmw.MegaWidget):
         self.flush_fifo_once()
         keep_alive = 1
         if poll:
-            print('before pollrun')
             import time
             while keep_alive:
                 self.root.update()
                 time.sleep(0.05)
-            print('finished pollrun')
         else:
-            print('before mainlooprun')
             self.root.mainloop()
-            print('finished mainlooprun')
             
         self.quit_app()
 
