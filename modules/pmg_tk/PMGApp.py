@@ -216,12 +216,16 @@ class PMGApp(Pmw.MegaWidget):
         self.flush_fifo_once()
         keep_alive = 1
         if poll:
+            print('before pollrun')
             import time
             while keep_alive:
                 self.root.update()
                 time.sleep(0.05)
+            print('finished pollrun')
         else:
+            print('before mainlooprun')
             self.root.mainloop()
+            print('finished mainlooprun')
             
         self.quit_app()
 
@@ -345,11 +349,19 @@ class PMGApp(Pmw.MegaWidget):
 
             inv = sys.modules.get("pymol.invocation",None)
             if inv != None:
+                # for aqua the window needs to be a little bigger
+                if self.root._windowingsystem == 'aqua':
+                    widthPad = 400
+                    heightPad = 50
+                else:
+                    widthPad = 220
+                    heightPad = 0
+
                 if skin == None:
                     skin = inv.options.skin
-                self.frameWidth = inv.options.win_x + 220
+                self.frameWidth = inv.options.win_x + widthPad
                 self.frameXPos = inv.options.win_px - self.frameXAdjust
-                self.frameHeight = inv.options.ext_y
+                self.frameHeight = inv.options.ext_y + heightPad
                 self.frameYPos = inv.options.win_py - (
                          self.frameHeight + self.frameYAdjust)
                 self.setSkin(skin,run=0)
