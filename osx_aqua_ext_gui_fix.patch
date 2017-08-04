@@ -1,0 +1,272 @@
+A fix that enables Pymol and the OSX native Aqua windowing system
+to play nicely together. By Max Klein, mklein@jhu.edu
+
+Notes:
+- Low level Apple libraries (Core Services) strictly enforce a rule 
+  that only a program's main thread may initialize/interact with Tkinter 
+  Aqua application windows. 
+
+- This patch works around this issue
+    - includes code that tests for 3 conditions:
+        - An external GUI has been requested during Pymol invocation
+        - Pymol is running on OS X
+        - The windowing system for external GUI is Aqua
+    
+    - When all three conditions are True, the patch code alters the
+      normal Pymol kickoff such that the external GUI runs in the main
+      thread while the glut GUI, which normally runs on the main thread,
+      runs on a child thread instead.
+
+- This particular fix was settled upon for reasons of performance
+  and ease of engineering. An alternative fix would be to set up
+  a way for both GUIs to share time on the main thread, although
+  performance drops would be likely.
+
+- The patch has been extensively tested on my own system (OS X 10.12.5)
+  and on the build servers of the homebrew project (Ubuntu 14.04, 
+  OS X 10.10.5, OS X 10.11.6, OS X 10.12.5). The patch was not found to have
+  a noticeable impact on GUI responsiveness/performance.
+
+diff --git a/modules/pmg_tk/PMGApp.py b/modules/pmg_tk/PMGApp.py
+index a3f36e37..26205e7e 100644
+--- a/modules/pmg_tk/PMGApp.py
++++ b/modules/pmg_tk/PMGApp.py
+@@ -295,7 +295,7 @@ class PMGApp(Pmw.MegaWidget):
+         if self.skin != None:
+             self.skin.setup()
+     
+-    def __init__(self, pymol_instance, skin):
++    def __init__(self, pymol_instance, skin, root=None):
+ 
+         # prevent overloading
+         self.initializePlugins = self._initializePlugins
+@@ -320,9 +320,8 @@ class PMGApp(Pmw.MegaWidget):
+ 
+             self.skin = None
+             
+-            # initialize Tcl/Tk
+-
+-            self.root = Tk() # creates the root window for the application
++            # initialize Tcl/Tk if an instance has not been passed in
++            self.root = root if root is not None else Tk() # the root window for the application
+ 
+             # color scheme
+ 
+@@ -346,11 +345,19 @@ class PMGApp(Pmw.MegaWidget):
+ 
+             inv = sys.modules.get("pymol.invocation",None)
+             if inv != None:
++                # for aqua the window needs to be a little bigger
++                if self.root._windowingsystem == 'aqua':
++                    widthPad = 400
++                    heightPad = 50
++                else:
++                    widthPad = 220
++                    heightPad = 0
++
+                 if skin == None:
+                     skin = inv.options.skin
+-                self.frameWidth = inv.options.win_x + 220
++                self.frameWidth = inv.options.win_x + widthPad
+                 self.frameXPos = inv.options.win_px - self.frameXAdjust
+-                self.frameHeight = inv.options.ext_y
++                self.frameHeight = inv.options.ext_y + heightPad
+                 self.frameYPos = inv.options.win_py - (
+                          self.frameHeight + self.frameYAdjust)
+                 self.setSkin(skin,run=0)
+diff --git a/modules/pmg_tk/__init__.py b/modules/pmg_tk/__init__.py
+index fa6aee84..1b1407a5 100644
+--- a/modules/pmg_tk/__init__.py
++++ b/modules/pmg_tk/__init__.py
+@@ -23,20 +23,18 @@ from .PMGApp import *
+ import sys, os, threading
+ import traceback
+ 
+-def run(pymol_instance,poll=0,skin=None):
++def run(pymol_instance,poll=0,skin=None,root=None):
+     try:
+         if not hasattr(sys,"argv"):
+             sys.argv=["pymol"]
+-        PMGApp(pymol_instance,skin).run(poll)
++        PMGApp(pymol_instance,skin,root).run(poll)
+     except:
+         traceback.print_exc()
+-        
+-def __init__(pymol_instance,poll=0,skin=None):
+-    t = threading.Thread(target=run,args=(pymol_instance,poll,skin))
+-    t.setDaemon(1)
+-    t.start()
+-
+-
+-
+-
+ 
++def __init__(pymol_instance,poll=0,skin=None,root=None,usethread=True):
++    if usethread:
++        t = threading.Thread(target=run,args=(pymol_instance,poll,skin,root))
++        t.setDaemon(1)
++        t.start()
++    else:
++        run(pymol_instance=pymol_instance, poll=poll, skin=skin, root=root)
+diff --git a/modules/pymol/__init__.py b/modules/pymol/__init__.py
+index 90b645b4..fad5ace9 100644
+--- a/modules/pymol/__init__.py
++++ b/modules/pymol/__init__.py
+@@ -364,12 +364,42 @@ def adapt_to_hardware(self):
+     # store our adapted state as default
+     cmd.reinitialize("store")
+ 
+-def launch_gui(self):
++def initGuiRoot():
++    '''
++    Tests 3 things:
++    - An external GUI has been requested.
++    - Pymol is running on a mac (ie `sys.platform == 'darwin'`).
++    - Tkinter is using aqua as its windowing system.
++
++    If all are True, the root window of the external GUI is initialized here and stored in the guiRoot global var.
++    '''
++    global guiRoot
++
++    if guiRoot is not None:
++        # this method has already been run at least once and no further action is needed
++        return
++
++    if invocation.options.external_gui in (1, 3) and sys.platform == 'darwin':
++        # we need an external gui and we're running on Darwin, special handling may be required
++
++        import Tkinter
++        root = Tkinter._default_root if Tkinter._default_root is not None else Tkinter.Tk()
++        if root._windowingsystem == 'aqua':
++            # Tkinter is using aqua as its windowing system, so initialize guiRoot here
++            guiRoot = root
++        else:
++            # Tkinter is using some other windowing system, so don't bother with guiRoot
++            guiRoot = False
++    else:
++        guiRoot = False
++
++def _launch_gui(self):
+     '''
+     Launch if requested:
+     - external GUI
+     - RPC server
+     '''
++    global guiRoot
+     pymol_path = os.getenv('PYMOL_PATH', '')
+ 
+     try:
+@@ -380,9 +410,17 @@ def launch_gui(self):
+                 os.environ['DISPLAY'] = ':0.0'
+ 
+         if self.invocation.options.external_gui in (1, 3):
++            if guiRoot:
++                # if passing guiRoot to the external GUI, run it using .mainloop() in this thread
++                poll = False
++                usethread = False
++            else:
++                usethread = True
++
+             __import__(self.invocation.options.gui)
+             sys.modules[self.invocation.options.gui].__init__(self, poll,
+-                    skin = self.invocation.options.skin)
++                skin=self.invocation.options.skin, root=guiRoot,
++                usethread=usethread)
+ 
+             # import plugin system
+             import pymol.plugins
+@@ -395,6 +433,26 @@ def launch_gui(self):
+     except:
+         traceback.print_exc()
+ 
++def launch_gui(self=None):
++    '''
++    Launch if requested:
++    - external GUI
++    - RPC server
++    '''
++    global guiRoot
++    global glutPymolInstance
++    initGuiRoot()
++
++    if guiRoot:
++        if glutPymolInstance is None:
++            # do nothing for now, but save the pymol instance for later
++            glutPymolInstance = self
++            return
++        else:
++            _launch_gui(glutPymolInstance)
++    else:
++        _launch_gui(self)
++
+ def prime_pymol():
+     '''
+     Set the current thread as the glutThread
+@@ -414,7 +472,7 @@ def prime_pymol():
+             # launch X11 (if needed)
+             os.system("/usr/bin/open -a X11")
+ 
+-def launch(args=None, block_input_hook=0):
++def _launch(args=None, block_input_hook=0):
+     '''
+     Run PyMOL with args
+ 
+@@ -426,6 +484,40 @@ def launch(args=None, block_input_hook=0):
+     prime_pymol()
+     _cmd.runpymol(_cmd._get_global_C_object(), block_input_hook)
+ 
++def _launch_threaded(args=None, block_input_hook=0):
++    global guiRoot
++    global glutPymolInstance
++    global glutThreadObject
++
++    # run PyMOL in thread
++    glutThreadObject = threading.Thread(target=_launch,
++        args=(args, block_input_hook))
++    glutThreadObject.setDaemon(1)
++    glutThreadObject.start()
++
++    e = threading.Event()
++
++    # wait for the C library to initialize
++    while cmd._COb is None:
++        e.wait(0.01)
++
++    # make sure symmetry module has time to start...
++    while not hasattr(pymol, 'xray'):
++        e.wait(0.01)
++
++    while glutPymolInstance is None:
++        time.sleep(0.01)
++    launch_gui()
++
++def launch(args=None, block_input_hook=0):
++    global guiRoot
++    initGuiRoot()
++
++    if guiRoot:
++        _launch_threaded(args=args, block_input_hook=block_input_hook)
++    else:
++        _launch(args=args, block_input_hook=block_input_hook)
++
+ def finish_launching(args=None):
+     '''
+     Start the PyMOL process in a thread
+@@ -447,7 +539,7 @@ def finish_launching(args=None):
+         # run PyMOL in thread
+         invocation.options.keep_thread_alive = 1
+         cmd.reaper = threading.currentThread()
+-        glutThreadObject = threading.Thread(target=launch,
++        glutThreadObject = threading.Thread(target=_launch,
+                 args=(list(args), 1))
+         glutThreadObject.start()
+ 
+@@ -531,6 +623,8 @@ def _colortype(cmd):
+ 
+ ######### VARIABLES ############################
+ 
++guiRoot = None
++glutPymolInstance = None
+ glutThread = 0
+ 
+ ######### ENVIRONMENT ##########################
