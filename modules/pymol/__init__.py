@@ -440,19 +440,16 @@ def launch_gui(self=None):
     - RPC server
     '''
     global guiRoot
-    global guiPymolInstance
+    global glutPymolInstance
     initGuiRoot()
 
-    # import ipdb; ipdb.set_trace()
-
     if guiRoot:
-        if guiPymolInstance is None:
-            print("self: %s, id(self): %s" % (self, id(self)))
-            print("cmd._COb: %s, id(cmd._COb): %s" % (cmd._COb, id(cmd._COb)))
+        if glutPymolInstance is None:
             # do nothing for now, but save the pymol instance for later
-            guiPymolInstance = self
+            glutPymolInstance = self
+            return
         else:
-            _launch_gui(guiPymolInstance)
+            _launch_gui(glutPymolInstance)
     else:
         _launch_gui(self)
 
@@ -489,14 +486,13 @@ def _launch(args=None, block_input_hook=0):
 
 def _launch_threaded(args=None, block_input_hook=0):
     global guiRoot
-    global guiPymolInstance
+    global glutPymolInstance
     global glutThreadObject
 
     # run PyMOL in thread
-    invocation.options.keep_thread_alive = 1
-    cmd.reaper = threading.currentThread()
     glutThreadObject = threading.Thread(target=_launch,
         args=(args, block_input_hook))
+    glutThreadObject.setDaemon(1)
     glutThreadObject.start()
 
     e = threading.Event()
@@ -509,15 +505,9 @@ def _launch_threaded(args=None, block_input_hook=0):
     while not hasattr(pymol, 'xray'):
         e.wait(0.01)
 
-    while guiPymolInstance is None:
-        time.sleep(.1)
+    while glutPymolInstance is None:
+        time.sleep(0.01)
     launch_gui()
-
-    # if guiRoot is not None:
-    #     # we need to update the external GUI on the main thread
-    #     while invocation.options.keep_thread_alive:
-    #         guiRoot.update()
-    #         time.sleep(.01)
 
 def launch(args=None, block_input_hook=0):
     global guiRoot
@@ -634,8 +624,8 @@ def _colortype(cmd):
 ######### VARIABLES ############################
 
 guiRoot = None
+glutPymolInstance = None
 glutThread = 0
-guiPymolInstance = None
 
 ######### ENVIRONMENT ##########################
 
