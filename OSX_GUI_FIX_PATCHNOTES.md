@@ -1,6 +1,9 @@
 A fix that enables Pymol and the OSX native Aqua windowing system
 to play nicely together. By Max Klein, mklein@jhu.edu
 
+The complete code for this patch can be found on GitHub at
+https://github.com/telamonian/pymol/tree/osx_gui_fix_-_invert_threads
+
 Notes:
 - Low level Apple libraries (Core Services) strictly enforce a rule
   that only a program's main thread may initialize/interact with Tkinter
