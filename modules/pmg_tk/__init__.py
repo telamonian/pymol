@@ -32,6 +32,9 @@ def run(pymol_instance,poll=0,skin=None,root=None):
         traceback.print_exc()
 
 def __init__(pymol_instance,poll=0,skin=None,root=None,usethread=True):
+    # if not bool(root), set root to None
+    if not root: root = None
+
     if usethread:
         t = threading.Thread(target=run,args=(pymol_instance,poll,skin,root))
         t.setDaemon(1)
