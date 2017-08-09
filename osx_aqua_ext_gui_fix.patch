@@ -9,7 +9,7 @@ Notes:
   that only a program's main thread may initialize/interact with Tkinter 
   Aqua application windows. 
 
-- This patch works around this issue
+- This patch installs a workaround for the Tkinter/main thread only issue
     - includes code that tests for 3 conditions:
         - An external GUI has been requested during Pymol invocation
         - Pymol is running on OS X
@@ -20,15 +20,11 @@ Notes:
       thread while the glut GUI, which normally runs on the main thread,
       runs on a child thread instead.
 
-- This particular fix was settled upon for reasons of performance
-  and ease of engineering. An alternative fix would be to set up
-  a way for both GUIs to share time on the main thread, although
-  performance drops would be likely.
-
-- The patch has been extensively tested on my own system (OS X 10.12.5)
-  and on the build servers of the homebrew project (Ubuntu 14.04, 
-  OS X 10.10.5, OS X 10.11.6, OS X 10.12.5). The patch was not found to have
-  a noticeable impact on GUI responsiveness/performance.
+- The patch has been extensively tested on my own systems (OS X 10.12.5, 
+  Ubuntu 14.04, Ubuntu 16.04) and on the build servers of the Homebrew 
+  project (Ubuntu 14.04, OS X 10.10.5, OS X 10.11.6, OS X 10.12.5). 
+  The patch was not found to have a noticeable impact on GUI 
+  responsiveness/performance.
 
 diff --git a/modules/pmg_tk/PMGApp.py b/modules/pmg_tk/PMGApp.py
 index a3f36e37..26205e7e 100644
@@ -78,10 +74,10 @@ index a3f36e37..26205e7e 100644
                           self.frameHeight + self.frameYAdjust)
                  self.setSkin(skin,run=0)
 diff --git a/modules/pmg_tk/__init__.py b/modules/pmg_tk/__init__.py
-index fa6aee84..1b1407a5 100644
+index fa6aee84..fda03447 100644
 --- a/modules/pmg_tk/__init__.py
 +++ b/modules/pmg_tk/__init__.py
-@@ -23,20 +23,18 @@ from .PMGApp import *
+@@ -23,20 +23,21 @@ from .PMGApp import *
  import sys, os, threading
  import traceback
  
@@ -102,9 +98,11 @@ index fa6aee84..1b1407a5 100644
 -
 -
 -
--
  
 +def __init__(pymol_instance,poll=0,skin=None,root=None,usethread=True):
++    # if not bool(root), set root to None
++    if not root: root = None
+ 
 +    if usethread:
 +        t = threading.Thread(target=run,args=(pymol_instance,poll,skin,root))
 +        t.setDaemon(1)
