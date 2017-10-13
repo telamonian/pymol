@@ -422,7 +422,9 @@ class Normal(PMGSkin):
         self.command.set(self.history[self.history_cur])
         l = len(self.history[self.history_cur])
         self.entry.icursor(l)
-    
+
+        return 'break'
+
     def forward(self):
         if not self.history_cur:
             self.history[0] = self.command.get()
@@ -430,6 +432,8 @@ class Normal(PMGSkin):
         self.command.set(self.history[self.history_cur])
         l = len(self.history[self.history_cur])
         self.entry.icursor(l)
+
+        return 'break'
 
     def doAsync(self,cmmd):
         t = threading.Thread(target=_doAsync,args=(self.cmd,cmmd))
