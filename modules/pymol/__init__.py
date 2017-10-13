@@ -414,6 +414,21 @@ def prime_pymol():
             # launch X11 (if needed)
             os.system("/usr/bin/open -a X11")
 
+def _tk_is_aqua():
+    if sys.platform != 'darwin':
+        return False
+
+    if sys.version_info[0] == 2:
+        import Tkinter as tkinter
+    else:
+        import tkinter
+
+    root = tkinter.Tk()
+    try:
+        return root._windowingsystem == 'aqua'
+    finally:
+        root.destroy()
+
 def launch(args=None, block_input_hook=0):
     '''
     Run PyMOL with args
@@ -423,6 +438,17 @@ def launch(args=None, block_input_hook=0):
     if args is None:
         args = sys.argv
     invocation.parse_args(args)
+
+    # hack for aqua Tk: swap threads
+    if invocation.options.gui == 'pmg_tk' \
+            and invocation.options.external_gui == 1 \
+            and _tk_is_aqua():
+        import pmg_tk, pymol
+        finish_launching(['pymol', '-x'])  # async
+        cmd.reaper = None  # avoid hanging on "quit"
+        pmg_tk.run(pymol, 0)  # main thread
+        return
+
     prime_pymol()
     _cmd.runpymol(_cmd._get_global_C_object(), block_input_hook)
 
